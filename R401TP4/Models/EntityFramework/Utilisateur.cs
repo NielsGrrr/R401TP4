@@ -50,10 +50,10 @@ namespace R401TP4.Models.EntityFramework
         [Column("utl_longitude")]
         public float? Longitude { get; set; }
 
-        [Column("utl_datecreation")]
+        [Column("utl_datecreation", TypeName = "date")]
         public DateTime Datecreation { get; set; } = DateTime.Now;
 
-        [InverseProperty("IdNotationNavigation")]
+        [InverseProperty("UtilisateurNotant")]
         public virtual ICollection<Notation> NotesUtilisateur { get; set; } = new List<Notation>();
     }
 }

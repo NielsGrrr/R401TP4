@@ -19,7 +19,7 @@ namespace R401TP4.Models.EntityFramework
         [Column("flm_resume")]
         public string? Resume { get; set; }
 
-        [Column("flm_datesortie")]
+        [Column("flm_datesortie", TypeName = "date")]
         public DateTime? Datesortie { get; set; }
 
         [Column("flm_duree")]
@@ -30,7 +30,7 @@ namespace R401TP4.Models.EntityFramework
         [StringLength(30)]
         public string? Genre { get; set; }
 
-        [InverseProperty("IdNotationNavigation")]
+        [InverseProperty("FilmNote")]
         public virtual ICollection<Notation> NotesFilm { get; set; } = new List<Notation>();
     }
 }
