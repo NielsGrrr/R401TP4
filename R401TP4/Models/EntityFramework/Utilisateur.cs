@@ -19,12 +19,16 @@ namespace R401TP4.Models.EntityFramework
         public string? Prenom { get; set; }
 
         [Column("utl_mobile", TypeName = "char(10)")]
+        [RegularExpression(@"^0[0-9]{9}$", ErrorMessage = "Le numéro de mobile doit commencer par 0 et être suivi de 9 chiffres")]
         public string? Mobile { get; set; }
 
+        [Required]
         [Column("utl_mail")]
-        [StringLength(100)]
+        [EmailAddress]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "La longueur d’un email doit être comprise entre 6 et 100 caractères.")]
         public string Mail { get; set; } = null!;
 
+        [Required]
         [Column("utl_pwd")]
         [StringLength(64)]
         public string Pwd { get; set; } = null!;
