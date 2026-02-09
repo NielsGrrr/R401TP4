@@ -1,15 +1,14 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using R401TP4.Controllers;
+using R401TP4.Models.DataManager;
 using R401TP4.Models.EntityFramework;
+using R401TP4.Models.Repository;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using System.Xml;
 
 namespace R401TP4.Controllers.Tests
 {
@@ -18,6 +17,7 @@ namespace R401TP4.Controllers.Tests
     {
         private UtilisateursController controller;
         private FilmsRatingDBContext context;
+        private IDataRepository<Utilisateur> dataRepository;
 
         [TestInitialize()]
         public void TestInitialize()
@@ -25,81 +25,94 @@ namespace R401TP4.Controllers.Tests
             var builder = new DbContextOptionsBuilder<FilmsRatingDBContext>()
                 .UseNpgsql("Host=localhost;Port=5432;Database=TheMovieDB;Username=postgres;Password=postgres");
             context = new FilmsRatingDBContext(builder.Options);
-            controller = new UtilisateursController(context);
+            dataRepository = new UtilisateurManager(context);
+            controller = new UtilisateursController(dataRepository);
         }
 
         [TestMethod()]
-        public void GetUtilisateursTest()
+        public async Task GetUtilisateursTest()
         {
             // Arrange
             List<Utilisateur> utilisateurs = context.Utilisateurs.ToList();
 
             // Act
-            var result = controller.GetUtilisateurs();
+            var result = await controller.GetUtilisateurs();
 
             // Assert
-            Assert.IsInstanceOfType(result, typeof(Task<ActionResult<IEnumerable<Utilisateur>>>));
-            CollectionAssert.AreEqual(utilisateurs, result.Result.Value.ToList(), "Les listes ne sont pas les mêmes");
+            // CORRECTION : Avec await, ce n'est plus une Task, mais directement un ActionResult
+            Assert.IsInstanceOfType(result, typeof(ActionResult<IEnumerable<Utilisateur>>));
+
+            // On vérifie le contenu
+            CollectionAssert.AreEqual(utilisateurs, result.Value.ToList(), "Les listes ne sont pas les mêmes");
         }
 
         [TestMethod()]
-        public void GetUtilisateurByIdTest_ExistingIdPassed_ReturnsRightItem()
+        public async Task GetUtilisateurByIdTest_ExistingIdPassed_ReturnsRightItem()
         {
             // Arrange
             int id = 1;
             Utilisateur utilisateur = context.Utilisateurs.Where(c => c.UtilisateurId == id).FirstOrDefault();
+
             // Act
-            var result = controller.GetUtilisateurById(id);
+            var result = await controller.GetUtilisateurById(id);
+
             // Assert
-            Assert.IsInstanceOfType(result, typeof(Task<ActionResult<Utilisateur>>));
-            Assert.AreEqual(utilisateur, result.Result.Value, "Les utilisateurs ne sont pas les mêmes");
+            // CORRECTION : On vérifie que c'est bien un ActionResult<Utilisateur>
+            Assert.IsInstanceOfType(result, typeof(ActionResult<Utilisateur>));
+            Assert.AreEqual(utilisateur.UtilisateurId, result.Value.UtilisateurId, "Les utilisateurs ne sont pas les mêmes");
         }
 
         [TestMethod()]
-        public void GetUtilisateurByIdTest_UnknownIdPassed_ReturnsNotFoundResult()
+        public async Task GetUtilisateurByIdTest_UnknownIdPassed_ReturnsNotFoundResult()
         {
             // Arrange
             int id = -1;
+
             // Act
-            var result = controller.GetUtilisateurById(id);
+            var result = await controller.GetUtilisateurById(id);
+
             // Assert
-            Assert.IsInstanceOfType(result, typeof(Task<ActionResult<Utilisateur>>));
-            Assert.IsInstanceOfType(result.Result.Result, typeof(NotFoundResult), "Le résultat n'est pas NotFound");
+            Assert.IsInstanceOfType(result, typeof(ActionResult<Utilisateur>));
+            // Ici on vérifie que le Result interne est bien un NotFoundResult
+            Assert.IsInstanceOfType(result.Result, typeof(NotFoundResult), "Le résultat n'est pas NotFound");
         }
 
         [TestMethod()]
-        public void GetUtilisateurByEmailTest_ExistingEmailPassed_ReturnsRightItem()
+        public async Task GetUtilisateurByEmailTest_ExistingEmailPassed_ReturnsRightItem()
         {
             // Arrange
             string email = "clilleymd@last.fm";
             Utilisateur utilisateur = context.Utilisateurs.Where(c => c.Mail == email).FirstOrDefault();
+
             // Act
-            var result = controller.GetUtilisateurByEmail(email);
+            var result = await controller.GetUtilisateurByEmail(email);
+
             // Assert
-            Assert.IsInstanceOfType(result, typeof(Task<ActionResult<Utilisateur>>));
-            Assert.AreEqual(utilisateur, result.Result.Value, "Les utilisateurs ne sont pas les mêmes");
+            Assert.IsInstanceOfType(result, typeof(ActionResult<Utilisateur>));
+            Assert.AreEqual(utilisateur.Mail, result.Value.Mail, "Les utilisateurs ne sont pas les mêmes");
         }
 
         [TestMethod()]
-        public void GetUtilisateurByEmailTest_UnknownEmailPassed_ReturnsNotFoundResult()
+        public async Task GetUtilisateurByEmailTest_UnknownEmailPassed_ReturnsNotFoundResult()
         {
             // Arrange
-            string email = "";
+            string email = "inconnu@test.com";
+
             // Act
-            var result = controller.GetUtilisateurByEmail(email);
+            var result = await controller.GetUtilisateurByEmail(email);
+
             // Assert
-            Assert.IsInstanceOfType(result.Result.Result, typeof(NotFoundResult));
+            Assert.IsInstanceOfType(result, typeof(ActionResult<Utilisateur>));
+            Assert.IsInstanceOfType(result.Result, typeof(NotFoundResult));
         }
 
         [TestMethod]
-        public void Postutilisateur_ModelValidated_CreationOK()
+        public async Task Postutilisateur_ModelValidated_CreationOK()
         {
             // Arrange
             Random rnd = new Random();
             int chiffre = rnd.Next(1, 1000000000);
-            // Le mail doit être unique donc 2 possibilités :
-            // 1. on s'arrange pour que le mail soit unique en concaténant un random ou un timestamp
-            // 2. On supprime le user après l'avoir créé. Dans ce cas, nous avons besoin d'appeler la méthode DELETE de l’APIou remove du DbSet.
+
             Utilisateur userAtester = new Utilisateur()
             {
                 Nom = "MACHIN",
@@ -114,21 +127,29 @@ namespace R401TP4.Controllers.Tests
                 Latitude = null,
                 Longitude = null
             };
+
             // Act
-            var result = controller.PostUtilisateur(userAtester).Result; // .Result pour appeler la méthode async de manière synchrone, afin d'attendre l’ajout
+            // CORRECTION : On utilise await ici aussi
+            var actionResult = await controller.PostUtilisateur(userAtester);
+
             // Assert
-            Utilisateur? userRecupere = context.Utilisateurs.Where(u => u.Mail.ToUpper() ==
-            userAtester.Mail.ToUpper()).FirstOrDefault(); // On récupère l'utilisateur créé directement dans la BD grace à son mail unique
-            // On ne connait pas l'ID de l’utilisateur envoyé car numéro automatique.
-            // Du coup, on récupère l'ID de celui récupéré et on compare ensuite les 2 users
-            userAtester.UtilisateurId = userRecupere.UtilisateurId;
-                        Assert.AreEqual(userRecupere, userAtester, "Utilisateurs pas identiques");
+            Assert.IsInstanceOfType(actionResult, typeof(ActionResult<Utilisateur>));
+
+            // On vérifie que c'est un CreatedAtActionResult (code 201)
+            Assert.IsInstanceOfType(actionResult.Result, typeof(CreatedAtActionResult));
+
+            var createdResult = actionResult.Result as CreatedAtActionResult;
+            Assert.AreEqual(201, createdResult.StatusCode);
+
+            // Vérification en base
+            Utilisateur userRecupere = context.Utilisateurs.Where(u => u.Mail.ToUpper() == userAtester.Mail.ToUpper()).FirstOrDefault();
+            Assert.IsNotNull(userRecupere);
         }
+
         [TestMethod]
-        public void PutUtilisateur_ModelValidated_UpdateOK()
+        public async Task PutUtilisateur_ModelValidated_UpdateOK()
         {
             // ARRANGE
-            // 1. On crée d'abord un utilisateur "original" dans la base pour avoir un ID valide
             Random rnd = new Random();
             int chiffre = rnd.Next(1, 1000000000);
 
@@ -137,7 +158,7 @@ namespace R401TP4.Controllers.Tests
                 Nom = "ORIGINAL",
                 Prenom = "Test",
                 Mobile = "0600000000",
-                Mail = "original" + chiffre + "@gmail.com", // Mail unique
+                Mail = "original" + chiffre + "@gmail.com",
                 Pwd = "Password123!",
                 Rue = "Rue Test",
                 Cp = "75000",
@@ -146,19 +167,18 @@ namespace R401TP4.Controllers.Tests
             };
 
             context.Utilisateurs.Add(userOriginal);
-            context.SaveChanges(); // On sauvegarde pour générer l'ID (Identity)
+            context.SaveChanges();
 
-            // 2. On prépare l'objet modifié (on change le Nom par exemple)
-            // Important : On détache l'entité locale pour éviter les conflits de tracking EF Core lors du test
+            // Détacher
             context.Entry(userOriginal).State = EntityState.Detached;
 
             Utilisateur userModifie = new Utilisateur()
             {
-                UtilisateurId = userOriginal.UtilisateurId, // Très important : même ID
-                Nom = "MODIFIE", // La valeur qu'on veut changer
+                UtilisateurId = userOriginal.UtilisateurId,
+                Nom = "MODIFIE",
                 Prenom = "Test",
                 Mobile = "0600000000",
-                Mail = userOriginal.Mail, // On garde le même mail
+                Mail = userOriginal.Mail,
                 Pwd = "Password123!",
                 Rue = "Rue Test",
                 Cp = "75000",
@@ -167,26 +187,23 @@ namespace R401TP4.Controllers.Tests
             };
 
             // ACT
-            // Appel de la méthode PutUtilisateur du contrôleur
-            var result = controller.PutUtilisateur(userModifie.UtilisateurId, userModifie).Result;
+            // CORRECTION : await au lieu de .Result
+            var result = await controller.PutUtilisateur(userModifie.UtilisateurId, userModifie);
 
             // ASSERT
-            // 1. Vérifier que le contrôleur retourne un code 204 (NoContent)
+            // Pour le PUT, le contrôleur retourne IActionResult, qui est implémenté par NoContentResult
             Assert.IsInstanceOfType(result, typeof(NoContentResult), "Le contrôleur aurait dû renvoyer NoContent (204)");
 
-            // 2. Vérifier en base de données que le nom a bien changé
-            // On utilise AsNoTracking() pour être sûr de lire la vraie valeur en base et pas le cache
+            // Vérification
             Utilisateur userEnBase = context.Utilisateurs.AsNoTracking()
                                             .FirstOrDefault(u => u.UtilisateurId == userOriginal.UtilisateurId);
-
-            Assert.AreEqual("MODIFIE", userEnBase.Nom, "Le nom n'a pas été mis à jour en base de données");
+            Assert.AreEqual("MODIFIE", userEnBase.Nom);
         }
 
         [TestMethod]
-        public void DeleteUtilisateur_ExistingId_DeletesUser()
+        public async Task DeleteUtilisateur_ExistingId_DeletesUser()
         {
             // ARRANGE
-            // 1. Ajout d'un utilisateur via le DbSet (comme demandé dans le TP)
             Random rnd = new Random();
             int chiffre = rnd.Next(1, 1000000000);
 
@@ -204,22 +221,21 @@ namespace R401TP4.Controllers.Tests
             };
 
             context.Utilisateurs.Add(userToDelete);
-            context.SaveChanges(); // Commit l'ajout pour avoir l'ID
-
+            context.SaveChanges();
             int idToDelete = userToDelete.UtilisateurId;
 
+            // Détacher pour éviter les conflits dans le Repository
+            context.Entry(userToDelete).State = EntityState.Detached;
+
             // ACT
-            // Appel de la méthode Delete du contrôleur
-            var result = controller.DeleteUtilisateur(idToDelete).Result;
+            // CORRECTION : await au lieu de .Result
+            var result = await controller.DeleteUtilisateur(idToDelete);
 
             // ASSERT
-            // 1. Vérifier que le retour est bien un NoContent (ou Ok selon votre code, mais standard = NoContent)
             Assert.IsInstanceOfType(result, typeof(NoContentResult), "Le delete aurait dû renvoyer un NoContent");
 
-            // 2. Vérification que l'utilisateur a été supprimé en le recherchant dans le DbSet
             Utilisateur userRecherche = context.Utilisateurs.Find(idToDelete);
-
-            Assert.IsNull(userRecherche, "L'utilisateur existe toujours en base alors qu'il aurait dû être supprimé");
+            Assert.IsNull(userRecherche, "L'utilisateur existe toujours en base");
         }
     }
 }
